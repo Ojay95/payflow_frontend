@@ -6,20 +6,32 @@ interface RequireAuthProps {
   children: React.ReactNode;
 }
 
+/**
+ * RequireAuth Refactor:
+ * Enforces a strict two-gate security model:
+ * 1. Gate 1: Existence of a valid JWT (Identity)
+ * 2. Gate 2: Completion of 2FA (Verification)
+ */
 const RequireAuth: React.FC<RequireAuthProps> = ({ children }) => {
-  const { user, token } = useStore();
+  const { token, is2faVerified } = useStore();
   const location = useLocation();
 
-  // Check both store and localStorage
-  const isAuthenticated = !!token || !!localStorage.getItem('payflow_token');
+  // gate 1: Check for JWT in store or persistent storage
+  const hasToken = !!token || !!localStorage.getItem('payflow_token');
 
-  if (!isAuthenticated) {
-    // Redirect to login but save the attempted location
+  if (!hasToken) {
+    // No identity found; redirect to login and preserve the attempted URL
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // If authenticated but visiting a protected route, we assume they passed 2FA
-  // In a production app, we would have a specific "is2FAVerified" flag in the store
+  // Gate 2: Check if the backend has verified the 2FA code for this session
+  if (!is2faVerified) {
+    // Identity is known, but verification is incomplete.
+    // Force the user to the 2FA screen.
+    return <Navigate to="/2fa" state={{ from: location }} replace />;
+  }
+
+  // Both gates passed: User is fully authorized for production-level operations
   return <>{children}</>;
 };
 

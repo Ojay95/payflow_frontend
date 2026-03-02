@@ -1,342 +1,263 @@
-
-import React, { useState, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import Navigation from '../components/Navigation';
-
-interface AdjustmentItem {
-  item_name: string;
-  amount: number; // in cents
-  description: string;
-  component_type: 'earnings' | 'deduction';
-}
+import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { api } from '../api';
+import { useStore } from '../store/useStore';
+import { AdjustmentItem, Employee, PayrollRun } from '../types';
+import Toast from '../components/Toast';
 
 const PayrollRunDetail: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { payrollDraft, setPayrollDraft } = useStore();
+
+  const [loading, setLoading] = useState(true);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
-  
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [currentAdjustments, setCurrentAdjustments] = useState<AdjustmentItem[]>([]);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const [employees, setEmployees] = useState([
-    { 
-      id: '1', 
-      name: "Sarah Chen", 
-      email: "sarah.c@innovate.com",
-      role: "Sr. Product Designer", 
-      base_salary_cents: 850000, 
-      adjustments: [] as AdjustmentItem[] 
-    },
-    { 
-      id: '2', 
-      name: "Marcus Wright", 
-      email: "marcus.w@innovate.com",
-      role: "Fullstack Developer", 
-      base_salary_cents: 720000, 
-      adjustments: [
-        { item_name: "Performance Bonus", amount: 250000, description: "Q3 Target exceeded", component_type: "earnings" }
-      ] as AdjustmentItem[]
-    },
-    { 
-      id: '3', 
-      name: "Temi Temio", 
-      email: "temiiii.temio@innovate.com",
-      role: "Marketing Lead", 
-      base_salary_cents: 680000, 
-      adjustments: [] as AdjustmentItem[] 
-    },
-  ]);
+  /**
+   * Production Data Sync:
+   * Fetches the specific payroll run state and linked employees from the backend.
+   */
+  useEffect(() => {
+    const fetchRunDetails = async () => {
+      if (!id || id === 'new') return;
 
-  const handleOpenAdjustments = (emp: any) => {
+      setLoading(true);
+      const res = await api.payroll.getDetails(id);
+
+      if (res.success && res.data) {
+        // Sync local draft with production backend state
+        setPayrollDraft({
+          runId: res.data.id,
+          employees: res.data.employees || [],
+          period: res.data.period
+        });
+      } else {
+        setToast({ message: res.error || "Failed to load payroll details.", type: 'error' });
+      }
+      setLoading(false);
+    };
+
+    fetchRunDetails();
+  }, [id, setPayrollDraft]);
+
+  const handleOpenAdjustments = (emp: Employee) => {
     setSelectedEmployee(emp);
-    setCurrentAdjustments(emp.adjustments.length > 0 ? [...emp.adjustments] : [{
-      item_name: '',
-      amount: 0,
-      description: '',
-      component_type: 'earnings'
-    }]);
+    // Initialize with existing adjustments or one empty row
+    setCurrentAdjustments(emp.adjustments?.length > 0
+        ? [...emp.adjustments]
+        : [{ item_name: '', amount: 0, description: '', component_type: 'earnings' }]
+    );
     setShowAdjustmentModal(true);
   };
 
-  const addItem = () => {
-    setCurrentAdjustments([...currentAdjustments, {
-      item_name: '',
-      amount: 0,
-      description: '',
-      component_type: 'earnings'
-    }]);
-  };
-
-  const removeItem = (index: number) => {
-    setCurrentAdjustments(currentAdjustments.filter((_, i) => i !== index));
-  };
-
-  const updateItem = (index: number, field: keyof AdjustmentItem, value: any) => {
-    const next = [...currentAdjustments];
-    next[index] = { ...next[index], [field]: value };
-    setCurrentAdjustments(next);
-  };
-
+  /**
+   * Save Adjustments:
+   * In production, we update the local store draft.
+   * The final 'Submit' call sends the entire adjustments map to the backend.
+   */
   const saveAdjustments = () => {
-    setEmployees(employees.map(emp => 
-      emp.id === selectedEmployee.id 
-        ? { ...emp, adjustments: currentAdjustments.filter(a => a.item_name.trim() !== '') } 
-        : emp
-    ));
+    if (selectedEmployee) {
+      const validAdjustments = currentAdjustments.filter(a => a.item_name.trim() !== '' && a.amount > 0);
+      useStore.getState().updateEmployeeAdjustment(selectedEmployee.id, validAdjustments);
+      setToast({ message: `Adjustments saved for ${selectedEmployee.full_name}`, type: 'success' });
+    }
     setShowAdjustmentModal(false);
   };
 
+  const handleSubmitRun = async () => {
+    if (!payrollDraft?.runId) return;
+
+    setLoading(true);
+    // Construct the adjustments payload for the backend engine
+    const adjustmentMap = payrollDraft.employees.reduce((acc, emp) => {
+      if (emp.adjustments.length > 0) acc[emp.id] = emp.adjustments;
+      return acc;
+    }, {} as Record<string, AdjustmentItem[]>);
+
+    const res = await api.payroll.initiate({ adjustments: adjustmentMap });
+
+    if (res.success) {
+      navigate('/payroll/approvals');
+    } else {
+      setToast({ message: res.error || "Failed to submit payroll run.", type: 'error' });
+    }
+    setLoading(false);
+  };
+
+  // Helper for cent-to-dollar precision
+  const formatUSD = (cents: number) =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+
   const totals = useMemo(() => {
-    let gross = 0;
-    let net = 0;
-    employees.forEach(emp => {
+    if (!payrollDraft) return { gross: "$0", net: "$0", adjs: "$0" };
+
+    let grossCents = 0;
+    let netCents = 0;
+
+    payrollDraft.employees.forEach(emp => {
       const base = emp.base_salary_cents;
-      const adj = emp.adjustments.reduce((sum, a) => {
-        return sum + (a.component_type === 'earnings' ? a.amount : -a.amount);
-      }, 0);
-      gross += base;
-      net += (base + adj);
+      const adjTotal = emp.adjustments.reduce((sum, a) =>
+          sum + (a.component_type === 'earnings' ? a.amount : -a.amount), 0
+      );
+      grossCents += base;
+      netCents += (base + adjTotal);
     });
-    return { gross: (gross/100).toLocaleString(), net: (net/100).toLocaleString(), deductions: ((gross - net)/100).toLocaleString() };
-  }, [employees]);
+
+    return {
+      gross: formatUSD(grossCents),
+      net: formatUSD(netCents),
+      adjs: formatUSD(netCents - grossCents)
+    };
+  }, [payrollDraft]);
+
+  if (loading) return <div className="flex items-center justify-center min-h-screen"><div className="size-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>;
 
   return (
-    <div className="p-4 md:p-8 max-w-[1200px] mx-auto pb-48">
-      <div className="flex flex-wrap gap-2 py-4 md:py-6">
-        <Link to="/payroll/history" className="text-slate-500 text-xs md:text-sm font-bold hover:text-primary transition-colors">Payroll History</Link>
-        <span className="text-slate-700 text-xs md:text-sm">/</span>
-        <span className="text-white text-xs md:text-sm font-black">June 2024 Cycle</span>
-      </div>
+      <div className="p-4 md:p-8 max-w-7xl mx-auto pb-48">
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
-      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6 pb-10">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-3">
-            <h1 className="text-white text-2xl md:text-3xl font-black leading-tight tracking-tight">Review Run - June 2024</h1>
-            <span className="shrink-0 px-2.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/50 text-[10px] font-black uppercase tracking-widest">Draft</span>
-          </div>
-          <p className="text-slate-400 text-sm md:text-base font-medium">Verify employee earnings and line-item adjustments.</p>
+        <div className="flex flex-wrap gap-2 py-4">
+          <Link to="/dashboard" className="text-slate-500 text-xs font-bold hover:text-primary transition-colors">Dashboard</Link>
+          <span className="text-slate-700 text-xs">/</span>
+          <span className="text-white text-xs font-black uppercase tracking-widest">{payrollDraft?.period || 'Current Cycle'}</span>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
-        <SummaryCard title="Base Disbursement" value={`$${totals.gross}`} icon="payments" />
-        <SummaryCard title="Net Adjustments" value={`$${totals.deductions}`} icon="account_balance_wallet" />
-        <SummaryCard title="Final Net Payout" value={`$${totals.net}`} icon="account_balance" primary className="sm:col-span-2 lg:col-span-1" />
-      </div>
+        <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6 pb-10">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <h1 className="text-white text-3xl font-black tracking-tight">Review Run Details</h1>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-900/40 text-amber-400 border border-amber-800/50 text-[10px] font-black uppercase">Draft Mode</span>
+            </div>
+            <p className="text-slate-400 text-sm font-medium">Validation step for {payrollDraft?.employees.length} employee disbursements.</p>
+          </div>
+        </div>
 
-      {/* Main Review Table/List */}
-      <div className="bg-card-dark border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-        <div className="hidden md:block">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-10">
+          <SummaryCard title="Scheduled Gross" value={totals.gross} icon="payments" />
+          <SummaryCard title="Total Adjustments" value={totals.adjs} icon="account_balance_wallet" />
+          <SummaryCard title="Expected Net Payout" value={totals.net} icon="account_balance" primary />
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
           <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-800/40 border-b border-slate-700">
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Employee</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Base Pay</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Adjustment Items</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Net Disbursement</th>
-              </tr>
+            <thead className="hidden md:table-header-group">
+            <tr className="bg-slate-800/40 border-b border-slate-700">
+              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Employee</th>
+              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Base Pay</th>
+              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Manual Line Items</th>
+              <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Net Disbursement</th>
+            </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
-              {employees.map(emp => {
-                 const netCents = emp.base_salary_cents + emp.adjustments.reduce((s, a) => s + (a.component_type === 'earnings' ? a.amount : -a.amount), 0);
-                 return (
+            {payrollDraft?.employees.map(emp => {
+              const net = emp.base_salary_cents + emp.adjustments.reduce((s, a) => s + (a.component_type === 'earnings' ? a.amount : -a.amount), 0);
+              return (
                   <tr key={emp.id} className="hover:bg-slate-800/50 transition-colors">
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-3">
-                        <div className="size-10 rounded-full bg-slate-700 shrink-0" style={{ backgroundImage: `url(https://picsum.photos/seed/${emp.email}/100/100)`, backgroundSize: 'cover' }}></div>
+                        <div className="size-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-primary text-xs uppercase">
+                          {emp.full_name[0]}
+                        </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-bold text-white truncate">{emp.name}</p>
-                          <p className="text-xs text-slate-500 truncate">{emp.role}</p>
+                          <p className="text-sm font-bold text-white truncate">{emp.full_name}</p>
+                          <p className="text-[10px] text-slate-500 font-black uppercase">{emp.role}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-5 text-sm font-bold text-slate-300">${(emp.base_salary_cents / 100).toLocaleString()}</td>
+                    <td className="px-6 py-5 text-sm font-bold text-slate-300">{formatUSD(emp.base_salary_cents)}</td>
                     <td className="px-6 py-5">
-                      <button 
-                        onClick={() => handleOpenAdjustments(emp)}
-                        className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline flex items-center gap-2 bg-primary/5 px-3 py-2 rounded-xl border border-primary/10 transition-all active:scale-[0.98]"
+                      <button
+                          onClick={() => handleOpenAdjustments(emp)}
+                          className="text-[10px] font-black uppercase text-primary bg-primary/5 px-3 py-2 rounded-xl border border-primary/10 hover:bg-primary/10 transition-all"
                       >
-                        <span className="material-symbols-outlined text-sm">add_circle</span>
-                        {emp.adjustments.length > 0 ? `${emp.adjustments.length} Line Items` : 'Add Adjustment'}
+                        {emp.adjustments.length > 0 ? `${emp.adjustments.length} Adjustments` : '+ Add Adjustment'}
                       </button>
                     </td>
-                    <td className="px-6 py-5 text-right">
-                      <p className="text-sm font-black text-white">${(netCents / 100).toLocaleString()}</p>
-                    </td>
+                    <td className="px-6 py-5 text-right text-sm font-black text-white">{formatUSD(net)}</td>
                   </tr>
-                );
-              })}
+              );
+            })}
             </tbody>
           </table>
         </div>
 
-        {/* Mobile View */}
-        <div className="md:hidden divide-y divide-slate-800">
-          {employees.map(emp => {
-             const netCents = emp.base_salary_cents + emp.adjustments.reduce((s, a) => s + (a.component_type === 'earnings' ? a.amount : -a.amount), 0);
-             return (
-              <div key={emp.id} className="p-5 space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="size-12 rounded-full bg-slate-700 shrink-0" style={{ backgroundImage: `url(https://picsum.photos/seed/${emp.email}/100/100)`, backgroundSize: 'cover' }}></div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-base font-bold text-white truncate">{emp.name}</p>
-                    <p className="text-xs text-slate-500 truncate">{emp.role}</p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between py-2 border-y border-white/5">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Base Pay</p>
-                    <p className="text-sm font-bold text-white">${(emp.base_salary_cents / 100).toLocaleString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Net Disburse</p>
-                    <p className="text-sm font-black text-primary">${(netCents / 100).toLocaleString()}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleOpenAdjustments(emp)}
-                  className="w-full h-12 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-white uppercase tracking-widest flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-base">edit_note</span>
-                  {emp.adjustments.length > 0 ? `Manage Adjustments (${emp.adjustments.length})` : 'Add Adjustments'}
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Global Action Footer */}
-      <footer className="fixed bottom-0 left-0 lg:left-72 right-0 bg-[#0F172A]/90 backdrop-blur-md border-t border-slate-800 p-4 md:p-6 shadow-2xl z-[100]">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-6 w-full sm:w-auto justify-between sm:justify-start">
+        <footer className="fixed bottom-0 left-0 lg:left-72 right-0 bg-slate-950/95 backdrop-blur-md border-t border-slate-800 p-6 z-[100]">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div className="flex flex-col">
-              <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em]">Grand Total (Net)</p>
-              <p className="text-2xl md:text-3xl font-black text-white tracking-tight">${totals.net}</p>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Grand Total to Fund</p>
+              <p className="text-3xl font-black text-white">{totals.net}</p>
             </div>
+            <button
+                onClick={handleSubmitRun}
+                disabled={loading}
+                className="px-10 h-14 bg-primary text-slate-900 rounded-2xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50"
+            >
+              {loading ? 'Processing...' : 'Submit for Approval'}
+            </button>
           </div>
-          <button 
-            onClick={() => navigate('/payroll/approvals')}
-            className="w-full sm:w-auto min-w-[240px] h-14 bg-primary text-slate-900 rounded-2xl font-black text-base shadow-2xl shadow-primary/30 hover:brightness-110 active:scale-[0.98] transition-all"
-          >
-            Submit for Final Review
-          </button>
-        </div>
-      </footer>
+        </footer>
 
-      {showAdjustmentModal && selectedEmployee && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 md:p-4 bg-slate-950/90 backdrop-blur-md">
-          <div className="bg-slate-900 w-full max-w-3xl rounded-3xl md:rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[95vh] animate-in fade-in zoom-in-95 duration-300">
-            <div className="p-6 md:p-8 border-b border-white/5 bg-primary/5 flex items-center justify-between">
-              <div className="min-w-0 pr-4">
-                <h2 className="text-xl md:text-2xl font-black text-white truncate">Line Items: {selectedEmployee.name}</h2>
-                <p className="text-slate-400 text-xs md:text-sm font-medium mt-1">Add contextual earnings or deductions.</p>
-              </div>
-              <button onClick={() => setShowAdjustmentModal(false)} className="size-10 flex items-center justify-center rounded-xl bg-white/5 text-slate-500 hover:text-white transition-colors shrink-0">
-                <span className="material-symbols-outlined text-2xl">close</span>
-              </button>
-            </div>
-
-            <div className="p-4 md:p-8 overflow-y-auto space-y-4 md:space-y-6 flex-1 bg-slate-900/50">
-              {currentAdjustments.map((item, idx) => (
-                <div key={idx} className="bg-slate-900 border border-white/10 rounded-2xl p-4 md:p-6 relative group">
-                  <button 
-                    onClick={() => removeItem(idx)}
-                    className="absolute top-4 right-4 text-slate-600 hover:text-red-400 transition-colors p-2"
-                  >
-                    <span className="material-symbols-outlined text-xl">delete</span>
-                  </button>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Reason / Item Name</label>
-                      <input 
-                        className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-4 text-sm focus:ring-2 focus:ring-primary/40 outline-none"
-                        placeholder="e.g. Performance Bonus"
-                        value={item.item_name}
-                        onChange={(e) => updateItem(idx, 'item_name', e.target.value)}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Type</label>
-                        <select 
-                          className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-3 text-xs md:text-sm focus:ring-2 focus:ring-primary/40 outline-none appearance-none"
-                          value={item.component_type}
-                          onChange={(e) => updateItem(idx, 'component_type', e.target.value)}
-                        >
-                          <option value="earnings">Earnings (+)</option>
-                          <option value="deduction">Deduction (-)</option>
-                        </select>
+        {showAdjustmentModal && selectedEmployee && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+              <div className="bg-slate-900 w-full max-w-2xl rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-8 border-b border-white/5 bg-primary/5 flex justify-between items-center">
+                  <h2 className="text-xl font-black text-white">Adjustments: {selectedEmployee.full_name}</h2>
+                  <button onClick={() => setShowAdjustmentModal(false)} className="text-slate-500 hover:text-white"><span className="material-symbols-outlined">close</span></button>
+                </div>
+                <div className="p-8 overflow-y-auto space-y-4">
+                  {currentAdjustments.map((item, idx) => (
+                      <div key={idx} className="bg-slate-950 p-6 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormGroup label="Description" value={item.item_name} onChange={(e:any) => {
+                          const n = [...currentAdjustments]; n[idx].item_name = e.target.value; setCurrentAdjustments(n);
+                        }} placeholder="e.g. Overtime" />
+                        <div className="grid grid-cols-2 gap-2">
+                          <FormGroup label="Type" isSelect value={item.component_type} onChange={(e:any) => {
+                            const n = [...currentAdjustments]; n[idx].component_type = e.target.value as any; setCurrentAdjustments(n);
+                          }} />
+                          <FormGroup label="Amount (¢)" type="number" value={item.amount} onChange={(e:any) => {
+                            const n = [...currentAdjustments]; n[idx].amount = parseInt(e.target.value) || 0; setCurrentAdjustments(n);
+                          }} placeholder="5000 = $50" />
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Amount (¢)</label>
-                        <input 
-                          type="number"
-                          className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-3 text-sm focus:ring-2 focus:ring-primary/40 outline-none"
-                          placeholder="10000 = $100"
-                          value={item.amount}
-                          onChange={(e) => updateItem(idx, 'amount', parseInt(e.target.value) || 0)}
-                        />
-                      </div>
-                    </div>
-                    <div className="md:col-span-2 flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Internal Notes</label>
-                      <input 
-                        className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-4 text-sm focus:ring-2 focus:ring-primary/40 outline-none"
-                        placeholder="Optional description for payslip..."
-                        value={item.description}
-                        onChange={(e) => updateItem(idx, 'description', e.target.value)}
-                      />
-                    </div>
-                  </div>
+                  ))}
+                  <button onClick={() => setCurrentAdjustments([...currentAdjustments, { item_name: '', amount: 0, description: '', component_type: 'earnings' }])} className="w-full py-4 border-2 border-dashed border-white/10 rounded-2xl text-slate-500 font-black text-xs uppercase hover:text-primary transition-colors">+ Add Line Item</button>
                 </div>
-              ))}
-
-              <button 
-                onClick={addItem}
-                className="w-full h-14 border-2 border-dashed border-white/10 rounded-2xl flex items-center justify-center gap-3 text-slate-500 hover:text-primary hover:border-primary/40 transition-all font-black text-sm uppercase tracking-widest"
-              >
-                <span className="material-symbols-outlined">add</span>
-                Add Line Item
-              </button>
-            </div>
-
-            <div className="p-6 md:p-8 bg-slate-900 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-6">
-              <div className="flex gap-6 w-full md:w-auto justify-around md:justify-start">
-                <div>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Additions</p>
-                  <p className="text-xl font-black text-green-400">
-                    +${(currentAdjustments.filter(a => a.component_type === 'earnings').reduce((s, a) => s + a.amount, 0) / 100).toLocaleString()}
-                  </p>
-                </div>
-                <div className="w-px h-10 bg-white/10 hidden md:block"></div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Cuts</p>
-                  <p className="text-xl font-black text-red-400">
-                    -${(currentAdjustments.filter(a => a.component_type === 'deduction').reduce((s, a) => s + a.amount, 0) / 100).toLocaleString()}
-                  </p>
+                <div className="p-8 border-t border-white/5 flex justify-end gap-4">
+                  <button onClick={() => setShowAdjustmentModal(false)} className="px-6 font-bold text-slate-500">Cancel</button>
+                  <button onClick={saveAdjustments} className="px-8 h-12 bg-primary text-slate-900 rounded-xl font-black">Apply Changes</button>
                 </div>
               </div>
-              <div className="flex gap-3 w-full md:w-auto">
-                <button onClick={() => setShowAdjustmentModal(false)} className="flex-1 md:px-6 h-12 font-bold text-slate-500 hover:text-white transition-colors">Discard</button>
-                <button onClick={saveAdjustments} className="flex-1 md:px-10 h-12 bg-primary text-slate-900 rounded-xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all">Save Adjustments</button>
-              </div>
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
   );
 };
 
-const SummaryCard = ({ title, value, icon, primary, className }: any) => (
-  <div className={`flex flex-col gap-2 rounded-2xl p-6 border shadow-xl transition-transform hover:scale-[1.02] ${className} ${primary ? 'bg-primary text-slate-900 border-primary' : 'bg-slate-900 border-slate-800'}`}>
-    <div className="flex justify-between items-start">
-      <p className={`text-[10px] font-black uppercase tracking-widest ${primary ? 'text-slate-800' : 'text-slate-500'}`}>{title}</p>
-      <span className={`material-symbols-outlined ${primary ? 'text-slate-800' : 'text-primary'}`}>{icon}</span>
+const FormGroup = ({ label, isSelect, ...props }: any) => (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{label}</label>
+      {isSelect ? (
+          <select className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-3 text-sm" {...props}>
+            <option value="earnings">Earnings (+)</option>
+            <option value="deduction">Deduction (-)</option>
+          </select>
+      ) : (
+          <input className="h-12 bg-slate-800 border border-white/10 rounded-xl text-white px-4 text-sm outline-none focus:ring-1 focus:ring-primary" {...props} />
+      )}
     </div>
-    <p className={`tracking-tight text-3xl font-black leading-tight ${primary ? 'text-slate-900' : 'text-white'}`}>{value}</p>
-  </div>
+);
+
+const SummaryCard = ({ title, value, icon, primary }: any) => (
+    <div className={`p-6 rounded-2xl border shadow-xl ${primary ? 'bg-primary border-primary' : 'bg-slate-900 border-slate-800'}`}>
+      <div className="flex justify-between items-start mb-4">
+        <p className={`text-[10px] font-black uppercase tracking-widest ${primary ? 'text-slate-900' : 'text-slate-500'}`}>{title}</p>
+        <span className={`material-symbols-outlined ${primary ? 'text-slate-900' : 'text-primary'}`}>{icon}</span>
+      </div>
+      <p className={`text-3xl font-black ${primary ? 'text-slate-900' : 'text-white'}`}>{value}</p>
+    </div>
 );
 
 export default PayrollRunDetail;
