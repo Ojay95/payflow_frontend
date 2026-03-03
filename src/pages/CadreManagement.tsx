@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import Navigation from '../components/Navigation';
-import Sidebar from '../components/Sidebar';
-import { api } from '../api';
-import { Cadre, ApiResponse } from '../types';
-import Toast from '../components/Toast';
+import Navigation from '../components/Navigation.tsx';
+import Sidebar from '../components/Sidebar.tsx';
+import { api } from '../api.ts';
+import { Cadre, ApiResponse } from '../types.ts';
+import Toast from '../components/Toast.tsx';
 
 const CadreManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);

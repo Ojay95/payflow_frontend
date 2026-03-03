@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useStore } from '../store/useStore';
-import { api } from '../api';
-import Toast from '../components/Toast';
+import { useStore } from '../store/useStore.ts';
+import { api } from '../api.ts';
+import Toast from '../components/Toast.tsx';
 
 const TwoFactorAuth: React.FC = () => {
   const [code, setCode] = useState(['', '', '', '', '', '']);

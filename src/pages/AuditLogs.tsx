@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
-import Navigation from '../components/Navigation';
-import Sidebar from '../components/Sidebar';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import Navigation from '../components/Navigation.tsx';
+import Sidebar from '../components/Sidebar.tsx';
+import Toast from '../components/Toast.tsx';
 
 interface AuditEntry {
   id: string;

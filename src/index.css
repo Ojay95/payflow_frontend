@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+    /* Define your missing colors here */
+    --color-primary: #2563EB;
+    --color-background-dark: #0f172a;
+    --color-card-dark: #1e293b;
+    --color-indigo-dark: #1e293b;
+
+    /* Define your display font */
+    --font-display: "Inter", sans-serif;
+}
+
+/* Your existing animations */
+@keyframes progress-loop {
+    0% { transform: translateX(-100%); }
+    50% { transform: translateX(-10%); }
+    100% { transform: translateX(200%); }
+}
+
+.animate-progress-loop {
+    animation: progress-loop 1.2s infinite linear;
+}

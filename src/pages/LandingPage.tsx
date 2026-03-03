@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import Toast from '../components/Toast';
-import { useStore } from '../store/useStore';
+import Toast from '../components/Toast.tsx';
+import { useStore } from '../store/useStore.ts';
 
 const LandingPage: React.FC = () => {
   const [showDemoModal, setShowDemoModal] = useState(false);

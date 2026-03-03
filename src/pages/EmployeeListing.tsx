@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { api } from '../api';
-import { Employee, Cadre } from '../types';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import { Employee, Cadre } from '../types.ts';
+import Toast from '../components/Toast.tsx';
 
 const EmployeeListing: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);

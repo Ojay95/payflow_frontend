@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
-import { useStore } from '../store/useStore';
-import { PayrollRun, Wallet } from '../types';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import { useStore } from '../store/useStore.ts';
+import { PayrollRun, Wallet } from '../types.ts';
+import Toast from '../components/Toast.tsx';
 
 const Dashboard: React.FC = () => {
   const [showInitModal, setShowInitModal] = useState(false);

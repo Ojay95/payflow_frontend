@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useStore } from '../store/useStore';
+import { useStore } from '../store/useStore.ts';
 
 interface SidebarProps {
   isOpen?: boolean;

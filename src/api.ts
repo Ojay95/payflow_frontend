@@ -1,7 +1,7 @@
-import { ApiResponse } from './types';
-import { useStore } from './store/useStore';
+import { ApiResponse } from './types.ts';
+import { useStore } from '@/src/store/useStore.ts';
 
-const BASE_URL = 'https://payflow-backend-production.up.railway.app';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://payflow-api-production-bf5e.up.railway.app';
 
 const getAuthHeader = () => {
   const token = localStorage.getItem('payflow_token');

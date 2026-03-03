@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
-import { PayrollRun, PayrollStatus } from '../types';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import { PayrollRun, PayrollStatus } from '../types.ts';
+import Toast from '../components/Toast.tsx';
 
 const PaymentHistory: React.FC = () => {
   const [history, setHistory] = useState<PayrollRun[]>([]);

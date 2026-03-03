@@ -3,8 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { api } from '../api';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import Toast from '../components/Toast.tsx';
 
 const signUpSchema = z.object({
   business_name: z.string().min(2, 'Business name is required'),

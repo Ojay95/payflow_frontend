@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { api } from '../api';
-import { useStore } from '../store/useStore';
-import Navigation from '../components/Navigation';
-import Toast from '../components/Toast';
-import { UserRole } from '../types';
+import { api } from '../api.ts';
+import { useStore } from '../store/useStore.ts';
+import Navigation from '../components/Navigation.tsx';
+import Toast from '../components/Toast.tsx';
+import { UserRole } from '../types.ts';
 
 const Settings: React.FC = () => {
     const [activeTab, setActiveTab] = useState('Deductions');

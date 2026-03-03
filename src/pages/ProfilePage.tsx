@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import Navigation from '../components/Navigation';
+import Navigation from '../components/Navigation.tsx';
 
 const ProfilePage: React.FC = () => {
   const [profile, setProfile] = useState({

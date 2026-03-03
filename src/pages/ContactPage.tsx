@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import Toast from '../components/Toast';
+import Toast from '../components/Toast.tsx';
 
 const ContactPage: React.FC = () => {
   const [toast, setToast] = useState<{message: string, type: 'success'} | null>(null);

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api';
-import { PayrollRun } from '../types';
-import Navigation from '../components/Navigation';
-import Sidebar from '../components/Sidebar';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import { PayrollRun } from '../types.ts';
+import Navigation from '../components/Navigation.tsx';
+import Sidebar from '../components/Sidebar.tsx';
+import Toast from '../components/Toast.tsx';
 
 const PayrollApprovals: React.FC = () => {
   const [runs, setRuns] = useState<PayrollRun[]>([]);

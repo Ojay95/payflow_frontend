@@ -1,27 +1,27 @@
 import React, { useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import Layout from './components/Layout';
-import RequireAuth from './components/RequireAuth';
-import { useStore } from './store/useStore';
+import Layout from '@/src/components/Layout.tsx';
+import RequireAuth from '@/src/components/RequireAuth.tsx';
+import { useStore } from '@/src/store/useStore.ts';
 
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import SignUpPage from './pages/SignUpPage';
-import Dashboard from './pages/Dashboard';
-import EmployeeListing from './pages/EmployeeListing';
-import PayrollRunDetail from './pages/PayrollRunDetail';
-import PayrollApprovals from './pages/PayrollApprovals';
-import PaymentHistory from './pages/PaymentHistory';
-import Settings from './pages/Settings';
-import CadreManagement from './pages/CadreManagement';
-import ForgotPassword from './pages/ForgotPassword';
-import EmailVerification from './pages/EmailVerification';
-import TwoFactorAuth from './pages/TwoFactorAuth';
-import AuditLogs from './pages/AuditLogs';
-import ProfilePage from './pages/ProfilePage';
-import PricingPage from './pages/PricingPage';
-import LegalPage from './pages/LegalPage';
-import ContactPage from './pages/ContactPage';
+import LandingPage from '@/src/pages/LandingPage.tsx';
+import LoginPage from '@/src/pages/LoginPage.tsx';
+import SignUpPage from '@/src/pages/SignUpPage.tsx';
+import Dashboard from '@/src/pages/Dashboard.tsx';
+import EmployeeListing from '@/src/pages/EmployeeListing.tsx';
+import PayrollRunDetail from '@/src/pages/PayrollRunDetail.tsx';
+import PayrollApprovals from '@/src/pages/PayrollApprovals.tsx';
+import PaymentHistory from '@/src/pages/PaymentHistory.tsx';
+import Settings from '@/src/pages/Settings.tsx';
+import CadreManagement from '@/src/pages/CadreManagement.tsx';
+import ForgotPassword from '@/src/pages/ForgotPassword.tsx';
+import EmailVerification from '@/src/pages/EmailVerification.tsx';
+import TwoFactorAuth from '@/src/pages/TwoFactorAuth.tsx';
+import AuditLogs from '@/src/pages/AuditLogs.tsx';
+import ProfilePage from '@/src/pages/ProfilePage.tsx';
+import PricingPage from '@/src/pages/PricingPage.tsx';
+import LegalPage from '@/src/pages/LegalPage.tsx';
+import ContactPage from '@/src/pages/ContactPage.tsx';
 
 /**
  * PublicRoute Refactor:

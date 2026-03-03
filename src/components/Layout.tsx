@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import Sidebar from './Sidebar';
-import { useStore } from '../store/useStore';
+import Sidebar from './Sidebar.tsx';
+import { useStore } from '../store/useStore.ts';
 
 /**
  * GlobalProgress Component:

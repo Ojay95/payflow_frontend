@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { api } from '../api';
-import { useStore } from '../store/useStore';
-import Toast from '../components/Toast';
+import { api } from '../api.ts';
+import { useStore } from '../store/useStore.ts';
+import Toast from '../components/Toast.tsx';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();

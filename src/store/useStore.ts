@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AuthUser, Employee, Wallet } from '../types';
+import { AuthUser, Employee, Wallet } from '../types.ts';
 
 interface AppState {
     // --- Auth State ---
